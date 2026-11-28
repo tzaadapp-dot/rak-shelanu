@@ -170,20 +170,21 @@ function introView() {
 <p class="body">בואו נתחיל.</p>
 <div class="onbbtns"><button class="wide" data-act="goto" data-s="auth" data-m="up">המשך</button><button class="wide ghost" data-act="goto" data-s="auth" data-m="in">יש לי כבר חשבון</button></div></div>`;
 }
-// Google sign-in stays hidden until it's set up in Supabase
-const GOOGLE_ON = false;
+// Google sign-in: the web client id from Google Cloud; the button stays hidden until it's filled in
+const GOOGLE_WEB_CLIENT = '605016176187-h0h2a1dvgn8teesh85t6mrgmf4a9k482.apps.googleusercontent.com';
+const GOOGLE_ON = !!GOOGLE_WEB_CLIENT || DEMO;
 const GBTN = `<button type="button" class="wide gbtn" data-act="google"><svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>המשך עם Google</button>
 <div class="or"><span>או עם אימייל</span></div>`;
 function authView() {
   const up = S.authMode === 'up';
   if (!up) return `<div class="onb"><h1>ברוכים השבים</h1><p class="lead">נכנסים עם ${NATIVE ? '' : 'Google או עם '}האימייל והסיסמה שלכם.</p>
-${S.err ? `<p class="err">${esc(S.err)}</p>` : ''}${NATIVE || !GOOGLE_ON ? '' : GBTN}
+${S.err ? `<p class="err">${esc(S.err)}</p>` : ''}${!GOOGLE_ON ? '' : GBTN}
 <form data-form="auth"><label for="em">אימייל</label><input id="em" type="email" name="email" autocomplete="username email" inputmode="email" required dir="ltr">
 <label for="pw">סיסמה</label><input id="pw" name="password" type="password" autocomplete="current-password" minlength="6" required dir="ltr">
 ${S.err ? `<p class="err">${esc(S.err)}</p>` : ''}${S.info ? `<p class="info">${esc(S.info)}</p>` : ''}
 <div class="onbbtns"><button class="wide">כניסה</button><button type="button" class="wide ghost" data-act="authmode">אין לי חשבון עדיין</button></div></form></div>`;
   return `<div class="onb">${dots(1)}<h1>נעים להכיר</h1><p class="lead">${NATIVE ? 'רק שם, אימייל וסיסמה.' : 'הכי מהיר: עם חשבון Google.'} את בן/בת הזוג מצרפים בסוף.</p>
-${NATIVE || !GOOGLE_ON ? '' : GBTN.replace('<div class="or">', '<p class="hint" style="margin-top:-6px">כניסה עם Google היא גם אישור של <a href="privacy.html" data-act="privacy" style="color:var(--acc)">מדיניות הפרטיות</a>.</p><div class="or">')}
+${!GOOGLE_ON ? '' : GBTN.replace('<div class="or">', '<p class="hint" style="margin-top:-6px">כניסה עם Google היא גם אישור של <a href="privacy.html" data-act="privacy" style="color:var(--acc)">מדיניות הפרטיות</a>.</p><div class="or">')}
 <form data-form="auth"><label for="nm">איך קוראים לך?</label><input id="nm" maxlength="30" required autocomplete="given-name"><p class="hint">זה השם שבן/בת הזוג יראו.</p>
 <label for="em">אימייל</label><input id="em" type="email" name="email" autocomplete="username email" inputmode="email" required dir="ltr">
 <label for="pw">סיסמה</label><input id="pw" name="password" type="password" autocomplete="new-password" minlength="6" required dir="ltr"><p class="hint">לפחות 6 תווים.</p>
@@ -661,7 +662,7 @@ ${E2E ? `<button class="mrow" data-act="e2esheet"><span class="fi">${ico('lock',
 <a class="mrow" href="privacy.html" data-act="privacy"><span class="fi">${ico('lock')}</span><span class="mt"><b>מדיניות פרטיות</b></span><span class="chev">‹</span></a>
 ${row('me', 'התנתקות', '', 'logout')}
 <div class="pad">${acctTools()}</div></div>
-<p class="center sub" style="padding:8px 0 0">רק שלנו · גרסה 3.8<br>נבנה באהבה בישראל</p>`;
+<p class="center sub" style="padding:8px 0 0">רק שלנו · גרסה 3.9<br>נבנה באהבה בישראל</p>`;
 };
 
 V.profile = () => {
@@ -1617,6 +1618,21 @@ document.addEventListener('click', async e => {
   }
   if (a === 'google') {
     S.err = ''; b.disabled = true;
+    if (NATIVE) { // Android: pick a Google account from the phone, no password
+      const SL = window.Capacitor?.Plugins?.SocialLogin;
+      if (!SL) { S.err = 'צריך לעדכן את האפליקציה בשביל כניסה עם Google'; render(); return; }
+      try {
+        await SL.initialize({ google: { webClientId: GOOGLE_WEB_CLIENT } });
+        const raw = [...crypto.getRandomValues(new Uint8Array(24))].map(x => x.toString(16).padStart(2, '0')).join('');
+        const hashed = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw)))].map(x => x.toString(16).padStart(2, '0')).join('');
+        const r = await SL.login({ provider: 'google', options: { nonce: hashed } }), tok = r?.result?.idToken;
+        if (!tok) throw new Error('no token');
+        const { error } = await sb.auth.signInWithIdToken({ provider: 'google', token: tok, nonce: raw });
+        if (error) throw error;
+        await loadAll();
+      } catch (e) { console.error(e); if (!/cancel/i.test(String(e?.message || e))) S.err = 'הכניסה עם Google לא הצליחה, נסו שוב'; render(); }
+      return;
+    }
     const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
     if (error) { S.err = /not enabled|provider/i.test(error.message) ? 'הכניסה עם Google עוד לא הופעלה. בינתיים אפשר עם אימייל.' : 'הכניסה עם Google לא הצליחה, נסו שוב'; render(); return; }
     if (DEMO) loadAll();
