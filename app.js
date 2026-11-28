@@ -178,15 +178,15 @@ function authView() {
   const up = S.authMode === 'up';
   if (!up) return `<div class="onb"><h1>ברוכים השבים</h1><p class="lead">נכנסים עם ${NATIVE ? '' : 'Google או עם '}האימייל והסיסמה שלכם.</p>
 ${S.err ? `<p class="err">${esc(S.err)}</p>` : ''}${NATIVE || !GOOGLE_ON ? '' : GBTN}
-<form data-form="auth"><label for="em">אימייל</label><input id="em" type="email" autocomplete="email" required dir="ltr">
-<label for="pw">סיסמה</label><input id="pw" type="password" autocomplete="current-password" minlength="6" required dir="ltr">
+<form data-form="auth"><label for="em">אימייל</label><input id="em" type="email" name="email" autocomplete="username email" inputmode="email" required dir="ltr">
+<label for="pw">סיסמה</label><input id="pw" name="password" type="password" autocomplete="current-password" minlength="6" required dir="ltr">
 ${S.err ? `<p class="err">${esc(S.err)}</p>` : ''}${S.info ? `<p class="info">${esc(S.info)}</p>` : ''}
 <div class="onbbtns"><button class="wide">כניסה</button><button type="button" class="wide ghost" data-act="authmode">אין לי חשבון עדיין</button></div></form></div>`;
   return `<div class="onb">${dots(1)}<h1>נעים להכיר</h1><p class="lead">${NATIVE ? 'רק שם, אימייל וסיסמה.' : 'הכי מהיר: עם חשבון Google.'} את בן/בת הזוג מצרפים בסוף.</p>
 ${NATIVE || !GOOGLE_ON ? '' : GBTN.replace('<div class="or">', '<p class="hint" style="margin-top:-6px">כניסה עם Google היא גם אישור של <a href="privacy.html" data-act="privacy" style="color:var(--acc)">מדיניות הפרטיות</a>.</p><div class="or">')}
 <form data-form="auth"><label for="nm">איך קוראים לך?</label><input id="nm" maxlength="30" required autocomplete="given-name"><p class="hint">זה השם שבן/בת הזוג יראו.</p>
-<label for="em">אימייל</label><input id="em" type="email" autocomplete="email" required dir="ltr">
-<label for="pw">סיסמה</label><input id="pw" type="password" autocomplete="new-password" minlength="6" required dir="ltr"><p class="hint">לפחות 6 תווים.</p>
+<label for="em">אימייל</label><input id="em" type="email" name="email" autocomplete="username email" inputmode="email" required dir="ltr">
+<label for="pw">סיסמה</label><input id="pw" name="password" type="password" autocomplete="new-password" minlength="6" required dir="ltr"><p class="hint">לפחות 6 תווים.</p>
 <label class="check" style="margin-top:8px"><input id="agree" type="checkbox" required> <span>קראתי את מדיניות הפרטיות, והיא מקובלת עליי</span></label>
 <a class="linkbtn" href="privacy.html" data-act="privacy" style="justify-self:start;display:inline-flex;align-items:center;text-decoration:none;font-weight:600">לקריאת המדיניות</a>
 ${S.err ? `<p class="err">${esc(S.err)}</p>` : ''}${S.info ? `<p class="info">${esc(S.info)}</p>` : ''}
@@ -661,7 +661,7 @@ ${E2E ? `<button class="mrow" data-act="e2esheet"><span class="fi">${ico('lock',
 <a class="mrow" href="privacy.html" data-act="privacy"><span class="fi">${ico('lock')}</span><span class="mt"><b>מדיניות פרטיות</b></span><span class="chev">‹</span></a>
 ${row('me', 'התנתקות', '', 'logout')}
 <div class="pad">${acctTools()}</div></div>
-<p class="center sub" style="padding:8px 0 0">רק שלנו · גרסה 3.7<br>נבנה באהבה בישראל</p>`;
+<p class="center sub" style="padding:8px 0 0">רק שלנו · גרסה 3.8<br>נבנה באהבה בישראל</p>`;
 };
 
 V.profile = () => {
@@ -1482,8 +1482,26 @@ async function markSeen() { for (const n of of('note').filter(n => n.by !== S.me
 
 // ---- notifications ----
 const b64 = s => { const p = '='.repeat((4 - s.length % 4) % 4), r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
+// Android app: notifications through Firebase (the web version uses web push)
+const PN = () => NATIVE && window.Capacitor?.Plugins?.PushNotifications;
+let pnReady = false;
+async function registerNative() {
+  const P = PN(); if (!P) return;
+  if (!pnReady) {
+    pnReady = true;
+    P.addListener('registration', t => { if (t?.value && S.me) sb.from('push_subs').upsert({ endpoint: 'fcm:' + t.value, sub: { fcm: t.value }, user_id: S.me }).then(() => { }); });
+    P.addListener('registrationError', e => console.error('push reg', e));
+    P.addListener('pushNotificationReceived', n => { if (n?.title) toast(n.title); });
+    P.addListener('pushNotificationActionPerformed', a => { const tab = a?.notification?.data?.tab; if (tab && S.stage === 'app' && VIEWS.includes(tab)) go(tab); });
+  }
+  await P.register();
+}
 async function checkPush() {
-  if (NATIVE) { S.push = 'native'; return; }
+  if (NATIVE) {
+    const P = PN(); if (!P) { S.push = 'native'; return; }
+    try { const st = await P.checkPermissions(); if (st.receive === 'granted') { S.push = 'on'; registerNative(); } else S.push = st.receive === 'denied' ? 'denied' : 'off'; } catch (_) { S.push = 'off'; }
+    return;
+  }
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) { S.push = 'unsupported'; return; }
   if (Notification.permission === 'denied') { S.push = 'denied'; return; }
   try {
@@ -1494,6 +1512,11 @@ async function checkPush() {
   } catch (_) { S.push = 'off'; }
 }
 async function enablePush() {
+  if (NATIVE) {
+    const P = PN(); if (!P) { toast('צריך לעדכן את האפליקציה'); return; }
+    try { const st = await P.requestPermissions(); if (st.receive !== 'granted') { S.push = 'denied'; render(); toast('ההתראות חסומות בהגדרות הטלפון'); return; } await registerNative(); S.push = 'on'; render(); toast('ההתראות הופעלו'); } catch (e) { console.error(e); toast('לא הצלחתי להפעיל התראות'); }
+    return;
+  }
   try {
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') { S.push = perm === 'denied' ? 'denied' : 'off'; render(); return; }

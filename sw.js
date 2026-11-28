@@ -1,5 +1,5 @@
 // Service worker: push notifications + offline shell
-const CACHE = 'rak-v31';
+const CACHE = 'rak-v32';
 const SHELL = ['./', './index.html', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './privacy.html'];
 
 self.addEventListener('install', e => {
