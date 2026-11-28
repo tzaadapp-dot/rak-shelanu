@@ -662,7 +662,7 @@ ${E2E ? `<button class="mrow" data-act="e2esheet"><span class="fi">${ico('lock',
 <a class="mrow" href="privacy.html" data-act="privacy"><span class="fi">${ico('lock')}</span><span class="mt"><b>מדיניות פרטיות</b></span><span class="chev">‹</span></a>
 ${row('me', 'התנתקות', '', 'logout')}
 <div class="pad">${acctTools()}</div></div>
-<p class="center sub" style="padding:8px 0 0">רק שלנו · גרסה 3.9<br>נבנה באהבה בישראל</p>`;
+<p class="center sub" style="padding:8px 0 0">רק שלנו · גרסה 3.10<br>נבנה באהבה בישראל</p>`;
 };
 
 V.profile = () => {
@@ -803,7 +803,15 @@ const SEASONS = [['חורף', '❄️'], ['אביב', '🌸'], ['קיץ', '☀�
 const ORD = ['הראשון', 'השני', 'השלישי', 'הרביעי', 'החמישי', 'השישי'];
 const dayKey = t => new Date(t).toLocaleDateString('en-CA');
 function seasonOf(k) { const y = +k.slice(0, 4), m = +k.slice(5, 7), s = m === 12 || m <= 2 ? 0 : m <= 5 ? 1 : m <= 8 ? 2 : 3; return { key: (m === 12 ? y + 1 : y) + '-' + s, s, y: m === 12 ? y + 1 : y }; }
-const storyOf = id => of('story').find(x => x.by === id);
+const storyOf = id => of('story').find(x => x.by === id && !x.y);
+// each year of the relationship gets its own short story, both sides
+const YEAR_Q = ['מה הכי זכור לך מהשנה הזאת?', 'רגע שצחקנו בו הכי הרבה', 'מקום שהיינו בו ביחד ולא נשכח', 'משהו שלמדנו אחד על השני', 'משפט אחד שמסכם את השנה'];
+const ORD_F = ['הראשונה', 'השנייה', 'השלישית', 'הרביעית', 'החמישית', 'השישית', 'השביעית', 'השמינית', 'התשיעית', 'העשירית'];
+const yearName = n => `השנה ${ORD_F[n - 1] || 'ה-' + n} שלנו`;
+const yearOf = k => { const s = S.couple?.start_date; if (!s) return null; if (k < s) return 1; return +k.slice(0, 4) - +s.slice(0, 4) + (k.slice(5) < s.slice(5) ? 0 : 1); };
+const yearsSoFar = () => yearOf(today()) || 0;
+const yearStory = (id, n) => of('story').find(x => x.by === id && x.y === n);
+const yearRange = n => { const s = S.couple.start_date, y0 = +s.slice(0, 4), md = s.slice(4), a = (y0 + n - 1) + md, b = addDays((y0 + n) + md, -1); return heD(a) + ' – ' + (b < today() ? heD(b) : 'היום'); };
 const lettersAll = () => of('letter').filter(l => l.openOn).sort((a, b) => a.openOn.localeCompare(b.openOn));
 const letterOpen = l => l.openOn <= today();
 const starsTxt = n => '★'.repeat(n || 0) + '☆'.repeat(5 - (n || 0));
@@ -863,9 +871,23 @@ function bookPages() {
   for (const n of notes) { const s = seasonOf(dayKey(n.at)); if (!chapters.has(s.key)) chapters.set(s.key, { ...s, items: [], notes: [] }); chapters.get(s.key).notes.push(n); }
   const sorted = [...chapters.values()].sort((a, b) => a.key.localeCompare(b.key)), real = sorted.filter(c => c.items.some(e => e.t !== 'milestone'));
   if (real.length) for (const c of sorted) if (!real.includes(c)) { const host = [...real].reverse().find(r => r.key < c.key) || real[0]; host.items.push(...c.items); host.notes.push(...c.notes); host.items.sort((x, y) => x.k.localeCompare(y.k)); }
-  const count = {}; let ci = 0, memI = 0;
-  for (const ch of real.length ? real : sorted) {
-    const n = count[ch.s] = (count[ch.s] || 0) + 1, [name, ico] = SEASONS[ch.s], title = `ה${name} ${ORD[n - 1] || 'של ' + ch.y} שלנו`;
+  const count = {}; let ci = 0, memI = 0, lastYr = 0;
+  // the n-th winter/spring/... counts from the day you met, not from when you installed the app
+  const sAbs = k => { const z = seasonOf(k); return z.y * 4 + z.s; }, startAbs = start ? sAbs(start) : null;
+  const yearPages = n => {
+    const qs = YEAR_Q.map((q, i) => ({ q, a: (yearStory(me, n)?.a || [])[i] || '', b: pt ? (yearStory(pt, n)?.a || [])[i] || '' : '' })).filter(x => x.a || x.b);
+    toc.rows.push([yearName(n), pages.length]);
+    pages.push({ t: 'opener', title: yearName(n), ico: n === 1 ? '🌱' : '🎂', sub: yearRange(n) });
+    for (let i = 0; i < qs.length;) { const x = qs[i], y = qs[i + 1], len = z => (z.a + z.b).length;
+      if (y && len(x) + len(y) < 320) { pages.push({ t: 'qa2', label: yearName(n), qs: [x, y] }); i += 2; } else { pages.push({ t: 'qa', label: yearName(n), q: x.q, a: x.a, b: x.b }); i++; } }
+  };
+  const chList = real.length ? real : sorted, chYear = ch => start ? yearOf(ch.items[0]?.k || ch.notes[0] && dayKey(ch.notes[0].at) || start) : 0;
+  const yrsWith = new Set([...chList.map(chYear), ...of('story').filter(x => x.y).map(x => x.y)]);
+  const openYear = upto => { if (!start) return; for (let n = lastYr + 1; n <= upto; n++) if (yrsWith.has(n) || n === upto) yearPages(n); lastYr = Math.max(lastYr, upto); };
+  for (const ch of chList) {
+    openYear(chYear(ch));
+    const [name, ico] = SEASONS[ch.s], n = start ? Math.floor((ch.y * 4 + ch.s - startAbs) / 4) + 1 : count[ch.s] = (count[ch.s] || 0) + 1;
+    const title = `ה${name} ${ORD[n - 1] || 'של ' + ch.y} שלנו`;
     const inCh = kind => of(kind).filter(x => seasonOf(dayKey(x.at)).key === ch.key).length;
     const nN = inCh('note'), nH = inCh('hug'), nD = ch.items.filter(e => e.t === 'date').length, nM = ch.items.filter(e => e.t === 'mem').length;
     const did = [nN && 'כתבנו ' + cnt(nN, 'פתק אחד', 'פתקים'), nH && 'שלחנו ' + cnt(nH, 'חיבוק אחד', 'חיבוקים'), nD && (nD === 1 ? 'יצאנו לדייט אחד' : `יצאנו ל-${nD} דייטים`), nM && 'שמרנו ' + cnt(nM, 'זיכרון אחד', 'זיכרונות')].filter(Boolean);
@@ -876,6 +898,8 @@ function bookPages() {
     for (const e of ch.items) pages.push(e.t === 'mem' ? { ...e, lay: memLayout(e.m, memI++) } : e);
     for (let i = 0; i < ch.notes.length; i += 3) pages.push({ t: 'quotes', notes: ch.notes.slice(i, i + 3) });
   }
+  const lastWith = Math.max(0, ...[...yrsWith].filter(n => n > lastYr));
+  if (lastWith) openYear(lastWith);
   // how alike we are
   const G2 = games(), tots = G2.filter(g => g.type === 'tot' && totDone(g)), gs = G2.filter(g => g.type === 'guess' && guessDone(g)), chs = G2.filter(g => g.type === 'challenge' && Object.keys(g.done || {}).length >= 2);
   if (tots.length || gs.length || chs.length) {
@@ -910,7 +934,7 @@ function pageInner(p, th) {
   switch (p.t) {
     case 'cover': { const ph = of('memory').filter(m => (m.photos || []).length).sort((a, b) => a.date.localeCompare(b.date))[0]?.photos[0];
       return `<section class="bpage bcover"><span class="born">${th.orn}</span><h2>${esc(bookTitle())}</h2>${ph ? `<div class="ph cov">${phImg(ph)}</div>` : ''}<b>${esc(coupleNames())}</b>${S.couple?.start_date ? `<span class="bsub">מאז ${heD(S.couple.start_date)}</span>` : ''}</section>`; }
-    case 'opener': return `<section class="bpage bcover"><span class="bico">${p.ico}</span><h2>${esc(p.title)}</h2><span class="bsub">כל אחד מאיתנו, מהצד שלו</span></section>`;
+    case 'opener': return `<section class="bpage bcover"><span class="bico">${p.ico}</span><h2>${esc(p.title)}</h2><span class="bsub">${esc(p.sub || 'כל אחד מאיתנו, מהצד שלו')}</span></section>`;
     case 'chapter': return `<section class="bpage bcover chap">${dd(SEASON_DOODLE[p.s], p.no * 7, 9)}<span class="bsub">פרק ${p.no}</span><span class="bico">${p.ico}</span><h2>${esc(p.title)}</h2>${p.story ? `<p class="bstory">${esc(p.story)}</p>` : ''}${p.stats.length ? `<div class="bchips">${p.stats.map(([v, l]) => `<span><b>${v}</b> ${l}</span>`).join('')}</div>` : ''}</section>`;
     case 'prose': return `<section class="bpage prose">${dd(th.orn, 3, 6)}${head(p.label)}<h3 class="btitle">${esc(p.title)}</h3><p class="bprose">${esc(p.text)}</p>${p.quotes.map(([u, t]) => `<p class="badd">${esc(realName(u))} ${G(u, 'זוכר', 'זוכרת')}: "${esc(t)}"</p>`).join('')}</section>`;
     case 'toc': return `<section class="bpage toc">${head('תוכן העניינים')}<ol class="btoc">${p.rows.map(([t, n]) => `<li><span>${esc(t)}</span><i></i><b>${n}</b></li>`).join('')}</ol></section>`;
@@ -943,8 +967,19 @@ ${ORIGIN.map((q, i) => `<label for="og${i}">${esc(q)}</label><textarea id="og${i
     return `<div class="card"><form data-form="letter"><b style="font-size:18px">💌 מכתב לעתיד${pt ? ' ל' + esc(realName(pt)) : ''}</b><p class="hint" style="margin:4px 0 8px">המכתב יישאר נעול עד התאריך שתבחר${M('', 'י')}, ואז ${pt ? esc(realName(pt)) + ' ' + P('יקבל', 'תקבל') + ' התראה ויוכל' + P('', 'ה') + ' לקרוא' : 'ייפתח'}. הוא ייכנס גם לספר.</p>
 <textarea id="lettxt" maxlength="3000" rows="6" required placeholder="מה הייתי רוצה ש${pt ? esc(realName(pt)) : ''} ${pt ? P('יקרא', 'תקרא') : 'תקראו'} עוד שנה…"></textarea><label for="letdate">מתי לפתוח?</label><input id="letdate" type="date" min="${min}" required value="${S.couple?.start_date ? (() => { const y = new Date().getFullYear(), d = S.couple.start_date.slice(4); let k = y + d; if (k <= today()) k = (y + 1) + d; return k; })() : min}"><p class="hint" style="margin:2px 0 8px">אפשר לבחור את יום השנה הבא שלכם.</p>
 <div class="row"><button style="flex:1">לחתום ולנעול 🔒</button><button type="button" class="ghost" data-act="bookedit" data-v="">ביטול</button></div></form></div>`; }
+  const YS = yearsSoFar();
+  if (/^y\d+$/.test(S.bookEdit || '') && YS) { const n = +S.bookEdit.slice(1), mineY = yearStory(S.me, n)?.a || [];
+    return `<div class="card"><form data-form="yearstory" data-n="${n}"><b style="font-size:18px">${n === 1 ? '🌱' : '🎂'} ${yearName(n)}</b><p class="hint" style="margin:4px 0 8px">${yearRange(n)}. ${pt ? esc(realName(pt)) + ' ' + P('עונה', 'עונה') + ' על אותן שאלות בנפרד, ובספר תראו את שני הצדדים.' : ''} לא חייבים לענות על הכל.</p>
+${YEAR_Q.map((q, i) => `<label for="yq${i}">${esc(q)}</label><textarea id="yq${i}" maxlength="500" rows="2">${esc(mineY[i] || '')}</textarea>`).join('')}<div class="row"><button style="flex:1">שמירה</button><button type="button" class="ghost" data-act="bookedit" data-v="years">חזרה</button></div></form></div>`; }
+  if (S.bookEdit === 'years' && YS) return `<div class="card"><b style="font-size:18px">📅 השנים שלנו</b><p class="hint" style="margin:4px 0 8px">כל שנה מקבלת פרק משלה בספר. כותבים מה זוכרים, וגם אפשר להוסיף זיכרונות עם תמונות מכל תאריך, והם ייכנסו לשנה הנכונה.</p></div><div class="card group">
+${Array.from({ length: YS }, (_, i) => i + 1).map(n => { const a = (yearStory(S.me, n)?.a || []).filter(Boolean).length, b = pt ? (yearStory(pt, n)?.a || []).filter(Boolean).length : 0, m = of('memory').filter(x => x.date && yearOf(x.date) === n).length;
+  return `<button class="mrow" data-act="bookedit" data-v="y${n}"><span class="fi">${n === 1 ? '🌱' : '🎂'}</span><span class="mt"><b>${yearName(n)}</b><span class="sub">${a ? 'ענית על ' + a + ' מתוך ' + YEAR_Q.length : 'עוד לא כתבת'}${pt ? ' · ' + esc(realName(pt)) + ': ' + b : ''}${m ? ' · ' + cnt(m, 'זיכרון אחד', 'זיכרונות') : ''}</span></span><span class="chev">‹</span></button>`; }).join('')}
+<button class="mrow" data-act="pastmem"><span class="fi">📷</span><span class="mt"><b>להוסיף זיכרון מהעבר</b><span class="sub">בוחרים את התאריך האמיתי שבו זה קרה</span></span><span class="chev">‹</span></button></div>
+<button class="ghost wide" data-act="bookedit" data-v="">סיום</button>`;
   const nextOpen = L.find(l => !letterOpen(l));
+  const yDone = YS ? Array.from({ length: YS }, (_, i) => i + 1).filter(n => (yearStory(S.me, n)?.a || []).some(Boolean)).length : 0;
   return `<h3 class="sec">להשלים את הספר</h3><div class="card group">
+${YS ? `<button class="mrow" data-act="bookedit" data-v="years"><span class="fi">📅</span><span class="mt"><b>השנים שלנו</b><span class="sub">${YS === 1 ? 'השנה הראשונה' : YS + ' שנים'} · כתבת על ${yDone} מתוך ${YS}</span></span><span class="chev">‹</span></button>` : ''}
 <button class="mrow" data-act="bookedit" data-v="story"><span class="fi">💞</span><span class="mt"><b>איך הכל התחיל</b><span class="sub">ענית על ${mine.filter(Boolean).length} מתוך ${ORIGIN.length}${pt ? ' · ' + esc(realName(pt)) + ': ' + his.filter(Boolean).length : ''}</span></span><span class="chev">‹</span></button>
 <button class="mrow" data-act="bookedit" data-v="letter"><span class="fi">💌</span><span class="mt"><b>מכתב לעתיד</b><span class="sub">${L.length ? L.length + ' מכתבים' + (nextOpen ? ' · הבא נפתח ב-' + heD(nextOpen.openOn) : '') : 'נעול עד תאריך שבוחרים'}</span></span><span class="chev">‹</span></button>
 <button class="mrow" data-act="tab" data-t="notes"><span class="fi">📝</span><span class="mt"><b>מילים טובות</b><span class="sub">${marked ? marked + ' פתקים בספר' : 'מסמנים 📖 על פתק כדי להכניס אותו לספר'}</span></span><span class="chev">‹</span></button>
@@ -1034,7 +1069,7 @@ async function drawPage(p, th, N) {
       else { T(bookTitle(), N * .075, N * .48, { w: 800, align: 'center' }); T(coupleNames(), N * .04, N * .58, { w: 600, align: 'center' }); if (S.couple?.start_date) T('מאז ' + heD(S.couple.start_date), N * .03, N * .65, { color: th.sub, align: 'center' }); }
       break;
     }
-    case 'opener': center(p.title, 'כל אחד מאיתנו, מהצד שלו', p.ico, N * .52); break;
+    case 'opener': center(p.title, p.sub || 'כל אחד מאיתנו, מהצד שלו', p.ico, N * .52); break;
     case 'chapter': {
       doodle(SEASON_DOODLE[p.s], p.no * 7, 9);
       T('פרק ' + p.no, N * .032, N * .24, { align: 'center', color: th.sub, w: 600 });
@@ -1584,6 +1619,7 @@ document.addEventListener('click', async e => {
   if (a === 'memphrm') { (S.memPh || []).splice(+b.dataset.i, 1); render(); return; }
   if (a === 'booktheme') { await setBook({ theme: b.dataset.k }); render(); return; }
   if (a === 'bookpdf') { if (!S.pdfBusy) bookPDF().catch(e => { console.error(e); S.pdfBusy = null; render(); toast('משהו השתבש בהכנת הקובץ'); }); return; }
+  if (a === 'pastmem') { S.sub = 'mem'; S.bookEdit = null; S.memDraft = { ...(S.memDraft || {}), date: S.couple?.start_date || today() }; go('together'); toast('בוחרים את התאריך שבו זה קרה 📅'); return; }
   if (a === 'otd') { if (isPremium()) go('book'); else { S.sub = 'mem'; go('together'); } return; }
   if (a === 'goto') { S.err = S.info = ''; if (b.dataset.m) S.authMode = b.dataset.m; if (b.dataset.s === 'intro') ls.set('rak-intro', '1'); if (b.dataset.s === 'notify') S.pref.other = (document.getElementById('fother')?.value || '').trim(); S.stage = b.dataset.s; render(); scrollTo(0, 0); return; }
   if (a === 'focus') { const v = b.dataset.v, f = S.pref.focus = S.pref.focus || []; if (f.includes(v)) f.splice(f.indexOf(v), 1); else if (f.length < 3) f.push(v); else toast('אפשר לבחור עד 3'); render(); return; }
@@ -1787,6 +1823,7 @@ document.addEventListener('submit', async e => {
     }
     if (k === 'memadd') { const id = f.dataset.id, t = val('ma-' + id), m = of('memory').find(x => x.id === id); if (!t || !m) return; upd(id, { adds: { ...(m.adds || {}), [S.me]: t } }, 'נוסף לזיכרון 💕'); return; }
     if (k === 'story') { const a = ORIGIN.map((_, i) => val('og' + i)), it = storyOf(S.me); if (it ? await upd(it.id, { a }) : await add('story', { a })) { S.bookEdit = null; toast('נשמר בספר 💞'); render(); } return; }
+    if (k === 'yearstory') { const n = +f.dataset.n, a = YEAR_Q.map((_, i) => val('yq' + i)), it = yearStory(S.me, n); if (it ? await upd(it.id, { a }) : await add('story', { y: n, a })) { S.bookEdit = 'years'; toast('נשמר בספר 💞'); render(); } return; }
     if (k === 'letter') { const t = val('lettxt'), d = val('letdate'); if (!t || !d || d <= today()) { if (d && d <= today()) toast('בוחרים תאריך עתידי'); return; } if (await add('letter', { text: t, openOn: d, to: pid() || null })) { S.bookEdit = null; toast('המכתב נחתם ונעול עד ' + heD(d) + ' 💌'); render(); } return; }
     if (k === 'booktitle') { const t = val('booktitle') || 'הסיפור שלנו'; if (t !== bookTitle()) { await setBook({ title: t }); toast('נשמר'); } return; }
   } finally { if (btn && btn.isConnected) btn.disabled = false; }
